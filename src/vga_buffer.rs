@@ -2,6 +2,7 @@ use core::fmt;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::Volatile;
+use x86_64::instructions::interrupts;
 
 const DEFAULT_FG_COLOR: Color = Color::White;
 const DEFAULT_BG_COLOR: Color = Color::Red;
@@ -141,7 +142,9 @@ macro_rules! println {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
-    WRITER.lock().write_fmt(args).unwrap();
+    interrupts::without_interrupts(|| {
+        WRITER.lock().write_fmt(args).unwrap();
+    })
 }
 
 // tests
@@ -160,10 +163,14 @@ fn test_println_many() {
 
 #[test_case]
 fn test_println_output() {
-    let s = "Testing string";
-    println!("{}", s);
-    for (i, c) in s.chars().enumerate() {
-        let screen_char = WRITER.lock().buffer.chars[BUFFER_HEIGHT - 2][i].read();
-        assert_eq!(char::from(screen_char.ascii_char), c);
-    }
+    use core::fmt::Write;
+    let s = "Testing string lol lol lol lol lol lol lol";
+    interrupts::without_interrupts(|| {
+        let mut wr = WRITER.lock();
+        writeln!(wr, "\n{}", s).expect("Write line failed");
+        for (i, c) in s.chars().enumerate() {
+            let screen_char = wr.buffer.chars[BUFFER_HEIGHT - 2][i].read();
+            assert_eq!(char::from(screen_char.ascii_char), c);
+        }
+    });
 }
