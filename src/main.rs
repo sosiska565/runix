@@ -8,20 +8,11 @@ use bootloader::{BootInfo, entry_point};
 use core::panic::PanicInfo;
 use runix::{hlt_loop, println};
 
+extern crate alloc;
+
 entry_point!(kernel_main);
 
-pub fn kernel_main(boot_info: &'static BootInfo) -> ! {
-    //test
-    let vga_buff = 0xb8000 as *mut u8;
-
-    for i in 0..25 * 80 {
-        unsafe {
-            *vga_buff.offset(i as isize * 2 + 1) = 0x44;
-        }
-    }
-    //test
-
-    println!("hello world");
+pub fn kernel_main(_boot_info: &'static BootInfo) -> ! {
     runix::init();
 
     //

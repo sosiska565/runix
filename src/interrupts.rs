@@ -1,7 +1,10 @@
-use crate::{gdt, hlt_loop, print, println};
+use crate::{
+    drivers::{keyboard::keyboard_interrupt_handler, timer::timer_interrupt_handler},
+    gdt, hlt_loop, println,
+};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
-use spin::{self, Mutex};
+use spin;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 pub const PIC_1_OFFSET: u8 = 32;
@@ -23,8 +26,8 @@ lazy_static! {
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
         }
-        idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler);
-        idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
+        idt[InterruptIndex::Timer as u8].set_handler_fn(timer_interrupt_handler);
+        idt[InterruptIndex::Keyboard as u8].set_handler_fn(keyboard_interrupt_handler);
         idt.page_fault.set_handler_fn(page_fault_interrupt_handler);
         idt
     };
@@ -32,12 +35,6 @@ lazy_static! {
 
 pub fn init_idt() {
     IDT.load();
-}
-
-fn eoi(interrupt_index: InterruptIndex) {
-    unsafe {
-        PICS.lock().notify_end_of_interrupt(interrupt_index.as_u8());
-    }
 }
 
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
@@ -58,43 +55,6 @@ extern "x86-interrupt" fn double_fault_handler(
 
 pub static PICS: spin::Mutex<ChainedPics> =
     spin::Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
-
-impl InterruptIndex {
-    fn as_u8(self) -> u8 {
-        self as u8
-    }
-}
-
-extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    eoi(InterruptIndex::Timer);
-}
-
-extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts};
-    use spin::Mutex;
-    use x86_64::instructions::port::Port;
-
-    static KEYBOARD: Mutex<Keyboard<layouts::Us104Key, ScancodeSet1>> = Mutex::new(Keyboard::new(
-        ScancodeSet1::new(),
-        layouts::Us104Key,
-        HandleControl::Ignore,
-    ));
-
-    let mut keyboard = KEYBOARD.lock();
-    let mut port = Port::new(0x60);
-    let scancode: u8 = unsafe { port.read() };
-
-    if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-        if let Some(key) = keyboard.process_keyevent(key_event) {
-            match key {
-                DecodedKey::Unicode(c) => print!("{}", c),
-                DecodedKey::RawKey(key) => print!("{:?}", key),
-            }
-        }
-    }
-
-    eoi(InterruptIndex::Keyboard);
-}
 
 extern "x86-interrupt" fn page_fault_interrupt_handler(
     stack_frame: InterruptStackFrame,

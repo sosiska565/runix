@@ -5,10 +5,13 @@
 #![reexport_test_harness_main = "test_main"]
 
 use core::panic::PanicInfo;
+extern crate alloc;
 
 #[cfg(test)]
 use bootloader::{BootInfo, entry_point};
 
+pub mod allocator;
+pub mod drivers;
 pub mod gdt;
 pub mod interrupts;
 pub mod memory;
